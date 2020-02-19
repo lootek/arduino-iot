@@ -16,7 +16,7 @@
 #include <WiFiNINA.h>
 #include "wiring_private.h"
 
-Uart mySerial (&sercom0, 5, 6, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+UART mySerial (&sercom0, 5, 6, SERCOM_RX_PAD_1, UART_TX_PAD_0);
 
 // Attach the interrupt handler to the SERCOM
 void SERCOM0_Handler()
