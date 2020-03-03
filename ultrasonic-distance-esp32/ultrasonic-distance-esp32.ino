@@ -41,7 +41,7 @@ void setup_wifi()
     Serial.println(WiFi.localIP());
   }
 
-  if (just_connected) client.publish("sensors/septic/wifi", WiFi.localIP().toString());
+  if (just_connected) client.publish("sensors/septic/wifi/ip", WiFi.localIP().toString());
 }
 
 void setup_mqtt()
@@ -49,13 +49,13 @@ void setup_mqtt()
   if (debug) {
     client.enableDebuggingMessages();
     client.enableHTTPWebUpdater();
-    client.enableLastWillMessage("lastwill", "I am going offline");
+    client.enableLastWillMessage("sensors/septic/lastwill", "I am going offline");
   }
 }
 
 void onConnectionEstablished()
 {
-  client.publish("sensors/septic/mqtt", "ready");
+  client.publish("sensors/septic/mqtt/status", "ready");
 }
 
 void setup_uart_sensor()
@@ -90,8 +90,6 @@ void measure()
       }
     } while (Serial.read() == 0xff);
   
-  //  Serial.flush();
-  
     if (data[0] == 0xff) {
       int sum = (data[0] + data[1] + data[2]) & 0x00FF;
       if (sum == data[3]) {
@@ -124,8 +122,6 @@ void measure()
         }
       }
     }
-  
-    // TODO: Reconnect WiFi?
 
     delay(100);
   }
@@ -173,5 +169,5 @@ void loop()
   setup_wifi();
   measure();
   client.loop();
-  delay(10 * 1000);
+  delay(30 * 1000);
 }
