@@ -10,7 +10,7 @@ const bool debug = true;
 EspMQTTClient client(
   ssid,
   password,
-  "192.168.10.75",       // MQTT Broker server ip
+  "192.168.10.18",       // MQTT Broker server ip
   "",                   // MQTTUsername, Can be omitted if not needed
   "",                   // MQTTPassword, Can be omitted if not needed
   "esp32_septic_tank",  // Client name that uniquely identify your device
@@ -74,9 +74,9 @@ void setup()
 }
 
 void measure() {
-  int dist; //actual distance measurements of LiDAR
+  int distance; //actual distance measurements of LiDAR
   int strength; //signal strength of LiDAR
-  float temprature;
+  float temperature;
   int check; //save check value
   int i;
   int uart[9]; //save data measured by LiDAR
@@ -93,18 +93,25 @@ void measure() {
         }
         check = uart[0] + uart[1] + uart[2] + uart[3] + uart[4] + uart[5] + uart[6] + uart[7];
         if (uart[8] == (check & 0xff)) { //verify the received data as per protocol
-          dist = uart[2] + uart[3] * 256; //calculate distance value
+          distance = uart[2] + uart[3] * 256; //calculate distance value
           strength = uart[4] + uart[5] * 256; //calculate signal strength value
-          temprature = uart[6] + uart[7] * 256; //calculate chip temprature
-          temprature = temprature / 8 - 256;
-          Serial.print("dist = ");
-          Serial.print(dist); //output measure distance value of LiDAR
-          Serial.print('\t');
-          Serial.print("strength = ");
-          Serial.print(strength); //output signal strength value
-          Serial.print("\t Chip Temprature = ");
-          Serial.print(temprature);
-          Serial.println(" celcius degree"); //output chip temperature of Lidar
+          temperature = uart[6] + uart[7] * 256; //calculate chip temperature
+          temperature = temperature / 8 - 256;
+
+          client.publish("sensors/septic/tfluna/distance", String(distance));
+          client.publish("sensors/septic/tfluna/strength", String(strength));
+          client.publish("sensors/septic/tfluna/temperature", String(temperature));
+
+          if (debug) {
+            Serial.print("distance = ");
+            Serial.print(distance); //output measure distance value of LiDAR
+            Serial.print('\t');
+            Serial.print("strength = ");
+            Serial.print(strength); //output signal strength value
+            Serial.print("\t Chip temperature = ");
+            Serial.print(temperature);
+            Serial.println(" celcius degree"); //output chip temperature of Lidar
+          }
         }
       }
     }
@@ -113,9 +120,8 @@ void measure() {
 
 void loop()
 {
-//  Serial.println("loop");
-//  setup_wifi();
+  setup_wifi();
   measure();
-//  client.loop();
-//  delay(1000);
+  client.loop();
+  delay(1000);
 }
