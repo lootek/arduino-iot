@@ -43,7 +43,7 @@ void setup_wifi()
     Serial.println(WiFi.localIP());
   }
 
-  if (just_connected) client.publish("sensors/septic/wifi/ip", WiFi.localIP().toString());
+  if (just_connected) client.publish("/sensors/septic/wifi/ip", WiFi.localIP().toString());
 }
 
 void setup_mqtt()
@@ -51,13 +51,13 @@ void setup_mqtt()
   if (debug) {
     client.enableDebuggingMessages();
     client.enableHTTPWebUpdater();
-    client.enableLastWillMessage("sensors/septic/lastwill", "I am going offline");
+    client.enableLastWillMessage("/sensors/septic/lastwill", "I am going offline");
   }
 }
 
 void onConnectionEstablished()
 {
-  client.publish("sensors/septic/mqtt/status", "ready");
+  client.publish("/sensors/septic/mqtt/status", "ready");
 }
 
 void setup_tfmini()
@@ -125,9 +125,9 @@ void measure(Stream& serial) {
       temperature = uart[6] + uart[7] * 256; //calculate chip temperature
       temperature = temperature / 8 - 256;
 
-      client.publish("sensors/septic/tfluna/distance", String(distance));
-      client.publish("sensors/septic/tfluna/signal-strength", String(strength));
-      client.publish("sensors/septic/tfluna/chip-temperature", String(temperature));
+      client.publish("/sensors/septic/tfluna/distance", String(distance));
+      client.publish("/sensors/septic/tfluna/signal-strength", String(strength));
+      client.publish("/sensors/septic/tfluna/chip-temperature", String(temperature));
 
       if (debug) {
         Serial.print("distance = ");
@@ -159,6 +159,6 @@ void loop()
   if (debug) {
     delay(2 * 1000);
   } else {
-    delay(60 * 1000);
+    delay(20 * 1000);
   }
 }
