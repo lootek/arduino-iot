@@ -7,7 +7,7 @@
 const char* ssid = "<SSID>";
 const char* password = "<PASS>";
 
-const bool debug = true;
+const bool debug = false;
 
 EspMQTTClient client(
   ssid,
@@ -65,13 +65,13 @@ void setup_tfmini()
   uart_set_pin(UART_NUM_0, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
   delay(100);
 
-  // Set frequency to 1Hz
-//  Serial.write((uint8_t)0x5A);
-//  Serial.write((uint8_t)0x06);
-//  Serial.write((uint8_t)0x03);
-//  Serial.write((uint8_t)0x01);
-//  Serial.write((uint8_t)0x00);
-//  Serial.write((uint8_t)0x00);
+  // Set frequency to 0Hz (ie. "trigger mode")
+  Serial.write((uint8_t)0x5A);
+  Serial.write((uint8_t)0x06);
+  Serial.write((uint8_t)0x03);
+  Serial.write((uint8_t)0x00); // freq lowest byte here (eg 0A for 10Hz)
+  Serial.write((uint8_t)0x00);
+  Serial.write((uint8_t)0x00);
 
   delay(100);
 }
@@ -85,6 +85,13 @@ void setup()
   setup_mqtt();
 }
 
+void trigger(Stream& serial) {
+  Serial.write((uint8_t)0x5A);
+  Serial.write((uint8_t)0x04);
+  Serial.write((uint8_t)0x04);
+  Serial.write((uint8_t)0x00);
+}
+
 void measure(Stream& serial) {
   int distance; //actual distance measurements of LiDAR
   int strength; //signal strength of LiDAR
@@ -95,36 +102,42 @@ void measure(Stream& serial) {
   const int HEADER = 0x59; //frame header of data package
 
   Serial.println("check if serial port has data input");
-  if (serial.available()) { //check if serial port has data input
-    if (serial.read() == HEADER) { //assess data package frame header 0x59
-      uart[0] = HEADER;
-      if (serial.read() == HEADER) { //assess data package frame header 0x59
-        uart[1] = HEADER;
-        for (i = 2; i < 9; i++) { //save data in array
-          uart[i] = serial.read();
-        }
-        check = uart[0] + uart[1] + uart[2] + uart[3] + uart[4] + uart[5] + uart[6] + uart[7];
-        if (uart[8] == (check & 0xff)) { //verify the received data as per protocol
-          distance = uart[2] + uart[3] * 256; //calculate distance value
-          strength = uart[4] + uart[5] * 256; //calculate signal strength value
-          temperature = uart[6] + uart[7] * 256; //calculate chip temperature
-          temperature = temperature / 8 - 256;
+  while (!serial.available()) { //check if serial port has data input
+    delay(10);
+  }
 
-          client.publish("sensors/septic/tfluna/distance", String(distance));
-          client.publish("sensors/septic/tfluna/strength", String(strength));
-          client.publish("sensors/septic/tfluna/temperature", String(temperature));
+  Serial.println("waiting for header");
+  while (serial.read() != HEADER) { //assess data package frame header 0x59
+    delay(10);
+  }
 
-          if (debug) {
-            Serial.print("distance = ");
-            Serial.print(distance); //output measure distance value of LiDAR
-            Serial.print('\t');
-            Serial.print("strength = ");
-            Serial.print(strength); //output signal strength value
-            Serial.print("\t Chip temperature = ");
-            Serial.print(temperature);
-            Serial.println(" celcius degree"); //output chip temperature of Lidar
-          }
-        }
+  uart[0] = HEADER;
+  Serial.println("reading data");
+  if (serial.read() == HEADER) { //assess data package frame header 0x59
+    uart[1] = HEADER;
+    for (i = 2; i < 9; i++) { //save data in array
+      uart[i] = serial.read();
+    }
+    check = uart[0] + uart[1] + uart[2] + uart[3] + uart[4] + uart[5] + uart[6] + uart[7];
+    if (uart[8] == (check & 0xff)) { //verify the received data as per protocol
+      distance = uart[2] + uart[3] * 256; //calculate distance value
+      strength = uart[4] + uart[5] * 256; //calculate signal strength value
+      temperature = uart[6] + uart[7] * 256; //calculate chip temperature
+      temperature = temperature / 8 - 256;
+
+      client.publish("sensors/septic/tfluna/distance", String(distance));
+      client.publish("sensors/septic/tfluna/signal-strength", String(strength));
+      client.publish("sensors/septic/tfluna/chip-temperature", String(temperature));
+
+      if (debug) {
+        Serial.print("distance = ");
+        Serial.print(distance); //output measure distance value of LiDAR
+        Serial.print('\t');
+        Serial.print("strength = ");
+        Serial.print(strength); //output signal strength value
+        Serial.print("\t Chip temperature = ");
+        Serial.print(temperature);
+        Serial.println(" celcius degree"); //output chip temperature of Lidar
       }
     }
   }
@@ -132,9 +145,20 @@ void measure(Stream& serial) {
 
 void loop()
 {
+  // reconnect WiFi if needed
   setup_wifi();
+
+  // perform measurement
+  trigger(Serial);
+  delay(10);
   measure(Serial);
+
+  // MQTT
   client.loop();
-  
-  delay(1000);
+
+  if (debug) {
+    delay(2 * 1000);
+  } else {
+    delay(60 * 1000);
+  }
 }
