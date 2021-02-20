@@ -1,5 +1,5 @@
 #include <driver/uart.h>
-#include <SoftwareSerial.h>
+//#include <SoftwareSerial.h>
 
 #include "WiFi.h"
 #include "EspMQTTClient.h"
@@ -16,7 +16,7 @@ TFMini tfmini;
 #define TFMINI_FRAME_SIZE 9
 #define TFMINI_MAXBYTESBEFOREHEADER 100
 
-SoftwareSerial mySerial(16, 17);
+//SoftwareSerial mySerial(16, 17);
 
 EspMQTTClient client(
   ssid,
@@ -71,9 +71,12 @@ void onConnectionEstablished()
 
 void setup_tfmini()
 {
-  mySerial.begin(TFMINI_BAUDRATE);
-  tfmini.begin(&mySerial);
-  delay(100);
+  uart_set_pin(UART_NUM_0, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+
+//  mySerial.begin(TFMINI_BAUDRATE);
+
+//  tfmini.begin(Serial);
+//  delay(100);
 //  tfmini.setSingleScanMode();
 }
 
@@ -88,19 +91,20 @@ void setup()
 
 void measure() {
   tfmini.externalTrigger();
+//  tfmini.setStandardOutputMode();
 
-//  uint16_t dist = tfmini.getDistance();
-//  uint16_t strength = tfmini.getRecentSignalStrength();
-//
-//  if (debug) {
-//    Serial.print("triggered - ");
-//    Serial.print(dist);
-//    Serial.print(",");
-//    Serial.println(strength);
-//  }
+  uint16_t dist = tfmini.getDistance();
+  uint16_t strength = tfmini.getRecentSignalStrength();
+
+  if (debug) {
+    Serial.print("triggered - ");
+    Serial.print(dist);
+    Serial.print(",");
+    Serial.println(strength);
+  }
 }
 
-void low_level_continuous_measure() {
+void low_level_continuous_measure(Stream& mySerial) {
   int distance; //actual distance measurements of LiDAR
   int strength; //signal strength of LiDAR
   float temperature;
@@ -150,7 +154,7 @@ void loop()
   setup_wifi();
   
 //  measure();
-  low_level_continuous_measure();
+  low_level_continuous_measure(Serial);
   
   client.loop();
   
