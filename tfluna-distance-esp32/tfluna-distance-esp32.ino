@@ -1,11 +1,14 @@
 #include "WiFi.h"
 #include "EspMQTTClient.h"
 #include <driver/uart.h>
+#include "TFMini.h"
 
 const char* ssid = "<SSID>";
 const char* password = "<PASS>";
 
 const bool debug = true;
+
+TFMini tfmini;
 
 EspMQTTClient client(
   ssid,
@@ -35,11 +38,11 @@ void setup_wifi()
       Serial.print(".");
   }
 
-//  if (debug) {
-//    Serial.println("");
-//    Serial.print("WiFi connected: ");
-//    Serial.println(WiFi.localIP());
-//  }
+  if (debug) {
+    Serial.println("");
+    Serial.print("WiFi connected: ");
+    Serial.println(WiFi.localIP());
+  }
 
   if (just_connected) client.publish("sensors/septic/wifi/ip", WiFi.localIP().toString());
 }
@@ -58,22 +61,39 @@ void onConnectionEstablished()
   client.publish("sensors/septic/mqtt/status", "ready");
 }
 
-void setup_uart_sensor()
+void setup_tfmini()
 {
   uart_set_pin(UART_NUM_0, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-  pinMode(15, OUTPUT);
+
+  Serial1.begin(TFMINI_BAUDRATE);
+  tfmini.begin(&Serial1);
+  delay(100);
+  tfmini.setSingleScanMode(); 
 }
 
 void setup()
 {
   Serial.begin(115200);
 
-  setup_uart_sensor();
+  setup_tfmini();
   setup_wifi();
   setup_mqtt();
 }
 
 void measure() {
+  tfmini.externalTrigger();
+  uint16_t dist = tfmini.getDistance();
+  uint16_t strength = tfmini.getRecentSignalStrength();
+
+  if (debug) {
+    Serial.print("triggered - ");
+    Serial.print(dist);
+    Serial.print(",");
+    Serial.println(strength);
+  }
+}
+
+void low_level_continuous_measure() {
   int distance; //actual distance measurements of LiDAR
   int strength; //signal strength of LiDAR
   float temperature;
@@ -81,9 +101,6 @@ void measure() {
   int i;
   int uart[9]; //save data measured by LiDAR
   const int HEADER = 0x59; //frame header of data package
-
-//  digitalWrite(15, HIGH);
-//  delay(1000);
 
   Serial.println("check if serial port has data input");
   if (Serial.available()) { //check if serial port has data input
@@ -119,9 +136,6 @@ void measure() {
       }
     }
   }
-
-//  delay(1000);
-//  digitalWrite(15, LOW);
 }
 
 void loop()
