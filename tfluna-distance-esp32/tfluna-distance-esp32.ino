@@ -35,11 +35,11 @@ void setup_wifi()
       Serial.print(".");
   }
 
-  if (debug) {
-    Serial.println("");
-    Serial.print("WiFi connected: ");
-    Serial.println(WiFi.localIP());
-  }
+//  if (debug) {
+//    Serial.println("");
+//    Serial.print("WiFi connected: ");
+//    Serial.println(WiFi.localIP());
+//  }
 
   if (just_connected) client.publish("sensors/septic/wifi/ip", WiFi.localIP().toString());
 }
@@ -61,7 +61,7 @@ void onConnectionEstablished()
 void setup_uart_sensor()
 {
   uart_set_pin(UART_NUM_0, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-  pinMode(21, OUTPUT);
+  pinMode(15, OUTPUT);
 }
 
 void setup()
@@ -82,7 +82,10 @@ void measure() {
   int uart[9]; //save data measured by LiDAR
   const int HEADER = 0x59; //frame header of data package
 
-//  Serial.println("check if serial port has data input");
+//  digitalWrite(15, HIGH);
+//  delay(1000);
+
+  Serial.println("check if serial port has data input");
   if (Serial.available()) { //check if serial port has data input
     if (Serial.read() == HEADER) { //assess data package frame header 0x59
       uart[0] = HEADER;
@@ -116,6 +119,9 @@ void measure() {
       }
     }
   }
+
+//  delay(1000);
+//  digitalWrite(15, LOW);
 }
 
 void loop()
