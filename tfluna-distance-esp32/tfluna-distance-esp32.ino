@@ -1,6 +1,8 @@
+#include <driver/uart.h>
+#include <SoftwareSerial.h>
+
 #include "WiFi.h"
 #include "EspMQTTClient.h"
-#include <driver/uart.h>
 #include "TFMini.h"
 
 const char* ssid = "<SSID>";
@@ -9,11 +11,17 @@ const char* password = "<PASS>";
 const bool debug = true;
 
 TFMini tfmini;
+#define TFMINI_DEBUGMODE 1
+#define TFMINI_MAX_MEASUREMENT_ATTEMPTS 100
+#define TFMINI_FRAME_SIZE 9
+#define TFMINI_MAXBYTESBEFOREHEADER 100
+
+SoftwareSerial mySerial(16, 17);
 
 EspMQTTClient client(
   ssid,
   password,
-  "192.168.10.18",       // MQTT Broker server ip
+  "192.168.10.18",      // MQTT Broker server ip
   "",                   // MQTTUsername, Can be omitted if not needed
   "",                   // MQTTPassword, Can be omitted if not needed
   "esp32_septic_tank",  // Client name that uniquely identify your device
@@ -63,12 +71,10 @@ void onConnectionEstablished()
 
 void setup_tfmini()
 {
-  uart_set_pin(UART_NUM_0, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-
-  Serial1.begin(TFMINI_BAUDRATE);
-  tfmini.begin(&Serial1);
+  mySerial.begin(TFMINI_BAUDRATE);
+  tfmini.begin(&mySerial);
   delay(100);
-  tfmini.setSingleScanMode(); 
+//  tfmini.setSingleScanMode();
 }
 
 void setup()
@@ -82,15 +88,16 @@ void setup()
 
 void measure() {
   tfmini.externalTrigger();
-  uint16_t dist = tfmini.getDistance();
-  uint16_t strength = tfmini.getRecentSignalStrength();
 
-  if (debug) {
-    Serial.print("triggered - ");
-    Serial.print(dist);
-    Serial.print(",");
-    Serial.println(strength);
-  }
+//  uint16_t dist = tfmini.getDistance();
+//  uint16_t strength = tfmini.getRecentSignalStrength();
+//
+//  if (debug) {
+//    Serial.print("triggered - ");
+//    Serial.print(dist);
+//    Serial.print(",");
+//    Serial.println(strength);
+//  }
 }
 
 void low_level_continuous_measure() {
@@ -103,13 +110,13 @@ void low_level_continuous_measure() {
   const int HEADER = 0x59; //frame header of data package
 
   Serial.println("check if serial port has data input");
-  if (Serial.available()) { //check if serial port has data input
-    if (Serial.read() == HEADER) { //assess data package frame header 0x59
+  if (mySerial.available()) { //check if serial port has data input
+    if (mySerial.read() == HEADER) { //assess data package frame header 0x59
       uart[0] = HEADER;
-      if (Serial.read() == HEADER) { //assess data package frame header 0x59
+      if (mySerial.read() == HEADER) { //assess data package frame header 0x59
         uart[1] = HEADER;
         for (i = 2; i < 9; i++) { //save data in array
-          uart[i] = Serial.read();
+          uart[i] = mySerial.read();
         }
         check = uart[0] + uart[1] + uart[2] + uart[3] + uart[4] + uart[5] + uart[6] + uart[7];
         if (uart[8] == (check & 0xff)) { //verify the received data as per protocol
@@ -141,7 +148,11 @@ void low_level_continuous_measure() {
 void loop()
 {
   setup_wifi();
-  measure();
+  
+//  measure();
+  low_level_continuous_measure();
+  
   client.loop();
+  
   delay(1000);
 }
