@@ -1,22 +1,13 @@
-#include <driver/uart.h>
-#include <SoftwareSerial.h>
+// Official docs: https://m.media-amazon.com/images/I/A1WJkVhXsEL.pdf
 
+#include <driver/uart.h>
 #include "WiFi.h"
 #include "EspMQTTClient.h"
-#include "TFMini.h"
 
 const char* ssid = "<SSID>";
 const char* password = "<PASS>";
 
 const bool debug = true;
-
-TFMini tfmini;
-#define TFMINI_DEBUGMODE 1
-//#define TFMINI_MAX_MEASUREMENT_ATTEMPTS 100
-//#define TFMINI_FRAME_SIZE 7
-//#define TFMINI_MAXBYTESBEFOREHEADER 100
-
-SoftwareSerial mySerial(16, 17);
 
 EspMQTTClient client(
   ssid,
@@ -72,22 +63,17 @@ void onConnectionEstablished()
 void setup_tfmini()
 {
   uart_set_pin(UART_NUM_0, 17, 16, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  delay(100);
 
-//  mySerial.begin(115200);
+  // Set frequency to 1Hz
+//  Serial.write((uint8_t)0x5A);
+//  Serial.write((uint8_t)0x06);
+//  Serial.write((uint8_t)0x03);
+//  Serial.write((uint8_t)0x01);
+//  Serial.write((uint8_t)0x00);
+//  Serial.write((uint8_t)0x00);
 
-//  tfmini.begin(&Serial);
-  delay(200);
-//  tfmini.setSingleScanMode();
-
-
-Serial.write((uint8_t)0x5A);
-Serial.write((uint8_t)0x06);
-Serial.write((uint8_t)0x03);
-Serial.write((uint8_t)0x01);
-Serial.write((uint8_t)0x00);
-Serial.write((uint8_t)0x00);
-
-  delay(200);
+  delay(100);
 }
 
 void setup()
@@ -99,22 +85,7 @@ void setup()
   setup_mqtt();
 }
 
-void measure() {
-//  tfmini.externalTrigger();
-//  tfmini.setStandardOutputMode();
-
-//  uint16_t dist = tfmini.getDistance();
-//  uint16_t strength = tfmini.getRecentSignalStrength();
-//
-//  if (debug) {
-//    Serial.print("triggered - ");
-//    Serial.print(dist);
-//    Serial.print(",");
-//    Serial.println(strength);
-//  }
-}
-
-void low_level_measure(Stream& serial) {
+void measure(Stream& serial) {
   int distance; //actual distance measurements of LiDAR
   int strength; //signal strength of LiDAR
   float temperature;
@@ -162,11 +133,8 @@ void low_level_measure(Stream& serial) {
 void loop()
 {
   setup_wifi();
-  
-  measure();
-  low_level_measure(Serial);
-  
+  measure(Serial);
   client.loop();
   
-  delay(100);
+  delay(1000);
 }
