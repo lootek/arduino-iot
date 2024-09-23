@@ -4,7 +4,7 @@
 #include <DHT.h>
 #include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-const bool debug = true;
+const bool debug = false;
 
 EspMQTTClient client(
   ssid,
