@@ -1,37 +1,39 @@
+#define MQTT_VERSION 3
+
 #include <EspMQTTClient.h>
 #include <DHT.h>
-#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
+#include "../wifi-creds.h"
 
-const bool debug = false;
+const char* location = "kitchen";
+const char* ssid = ssid_a;
+
+const bool debug = true;
 
 EspMQTTClient client(
-  ssid_f,
+  ssid,
   password,
-  "192.168.10.18",      // MQTT Broker server ip
-  "",                   // MQTTUsername, Can be omitted if not needed
-  "",                   // MQTTPassword, Can be omitted if not needed
-  "arbor",              // Client name that uniquely identify your device
-  1883                  // The MQTT port, default to 1883. this line can be omitted
+  "192.168.10.18",  // MQTT Broker server ip
+  "",               // MQTTUsername, Can be omitted if not needed
+  "",               // MQTTPassword, Can be omitted if not needed
+  location,         // Client name that uniquely identify your device
+  1883              // The MQTT port, default to 1883. this line can be omitted
 );
 
-DHT dht(4, DHT22);
+DHT dht(14, DHT22);
 
-void setup_mqtt()
-{
+void setup_mqtt() {
   client.enableDebuggingMessages(debug);
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
-  client.enableLastWillMessage("/sensors/arbor/lastwill", "I am going offline");
+  client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
 }
 
-void onConnectionEstablished()
-{
-  client.publish("/sensors/arbor/mqtt/status", "ready");
-  client.publish("/sensors/arbor/wifi/ip", String(client.getMqttServerIp()));
+void onConnectionEstablished() {
+  client.publish("/sensors/" + String(location) + "/mqtt/status", "ready");
+  client.publish("/sensors/" + String(location) + "/wifi/ip", String(client.getMqttServerIp()));
 }
 
-void setup()
-{
+void setup() {
   Serial.begin(115200);
   dht.begin();
   setup_mqtt();
@@ -43,7 +45,7 @@ void measure(Stream& serial) {
     Serial.println("Temp measurement error");
   } else {
     Serial.println(t);
-    client.publish("/sensors/arbor/dht22/temperature", String(t));
+    client.publish("/sensors/" + String(location) + "/dht22/temperature", String(t));
   }
 
   float h = dht.readHumidity();
@@ -51,9 +53,9 @@ void measure(Stream& serial) {
     Serial.println("Humidity measurement error");
   } else {
     Serial.println(h);
-    client.publish("/sensors/arbor/dht22/humidity", String(h));
+    client.publish("/sensors/" + String(location) + "/dht22/humidity", String(h));
   }
-  
+
   if (debug) {
     Serial.print("temperature = ");
     Serial.println(t);
@@ -63,8 +65,7 @@ void measure(Stream& serial) {
   }
 }
 
-void loop()
-{
+void loop() {
   measure(Serial);
 
   // MQTT
