@@ -2,9 +2,13 @@
 #include <driver/uart.h>
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
-#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
+#include "../wifi-creds.h"
 
-const bool debug = false;
+const char* location = "soil_2";
+const char* ssid = ssid_a;
+const int deep_sleep_duration = 3600 * 0; // [s]
+
+const bool debug = true;
 
 EspMQTTClient client(
   ssid,
@@ -12,68 +16,61 @@ EspMQTTClient client(
   "192.168.10.18",      // MQTT Broker server ip
   "",                   // MQTTUsername, Can be omitted if not needed
   "",                   // MQTTPassword, Can be omitted if not needed
-  "soil_1",             // Client name that uniquely identify your device
+  location,             // Client name that uniquely identify your device
   1883                  // The MQTT port, default to 1883. this line can be omitted
 );
 
-#define DHTPIN 22
-#define DHTTYPE    DHT11
-DHT dht(DHTPIN, DHTTYPE);
-
-String readDHTTemperature() {
-  float t = dht.readTemperature();
-  if (isnan(t)) {
-    Serial.println("Temp measurement error");
-    return "--";
-  } else {
-    Serial.println(t);
-    return String(t);
-  }
-}
-
-String readDHTHumidity() {
-  float h = dht.readHumidity();
-  if (isnan(h)) {
-    Serial.println("Humidity measurement error");
-    return "--";
-  } else {
-    Serial.println(h);
-    return String(h);
-  }
-}
+DHT dht(22, DHT11);
 
 void setup_mqtt()
 {
   client.enableDebuggingMessages(debug);
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
-  client.enableLastWillMessage("/sensors/soil_1/lastwill", "I am going offline");
+  client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
+}
+
+void setup_deep_sleep()
+{
+  if (deep_sleep_duration <= 0) {
+    return;
+  }
+  
+  esp_sleep_enable_timer_wakeup(deep_sleep_duration * 1000000ULL); // [us] -> [s]
+  Serial.println("Will wake up every " + String(deep_sleep_duration) + "s");
 }
 
 void onConnectionEstablished()
 {
-  client.publish("/sensors/soil_1/mqtt/status", "ready");
-  client.publish("/sensors/soil_1/wifi/ip", String(client.getMqttServerIp()));
+  client.publish("/sensors/" + String(location) + "/mqtt/status", "ready");
+  client.publish("/sensors/" + String(location) + "/wifi/ip", String(client.getMqttServerIp()));
 }
 
 void setup()
 {
   Serial.begin(115200);
-
+  dht.begin();
   setup_mqtt();
+  setup_deep_sleep();
 }
 
 void measure(Stream& serial) {
   float t = dht.readTemperature();
-  if (!isnan(t)) {
-    client.publish("/sensors/soil_1/dht11/temperature", String(t));
+  if (isnan(t)) {
+    Serial.println("Temp measurement error");
+  } else {
+    Serial.println(t);
+    client.publish("/sensors/" + String(location) + "/dht11/temperature", String(t));
   }
 
   float h = dht.readHumidity();
-  if (!isnan(h)) {
-    client.publish("/sensors/soil_1/dht11/humidity", String(h));
+  if (isnan(h)) {
+    Serial.println("Humidity measurement error");
+  } else {
+    Serial.println(h);
+    client.publish("/sensors/" + String(location) + "/dht11/humidity", String(h));
   }
-  
+
   if (debug) {
     Serial.print("temperature = ");
     Serial.println(t);
@@ -90,9 +87,16 @@ void loop()
   // MQTT
   client.loop();
 
-  if (debug) {
+  if (deep_sleep_duration > 0) {
     delay(5 * 1000);
+    Serial.println("Going to sleep now");
+    Serial.flush();
+    esp_deep_sleep_start();
   } else {
-    delay(30 * 1000);
+    if (debug) {
+      delay(5 * 1000);
+    } else {
+      delay(30 * 1000);
+    }
   }
 }
