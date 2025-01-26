@@ -28,6 +28,7 @@ void setup_mqtt()
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
   client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
+  client.loop();
 }
 
 void setup_deep_sleep()
@@ -70,33 +71,17 @@ void measure(Stream& serial) {
     Serial.println(h);
     client.publish("/sensors/" + String(location) + "/dht11/humidity", String(h));
   }
-
-  if (debug) {
-    Serial.print("temperature = ");
-    Serial.println(t);
-
-    Serial.print("humidity = ");
-    Serial.println(h);
-  }
 }
 
 void loop()
 {
   measure(Serial);
 
-  // MQTT
-  client.loop();
+  delay(30 * 1000);
 
   if (deep_sleep_duration > 0) {
-    delay(5 * 1000);
     Serial.println("Going to sleep now");
     Serial.flush();
     esp_deep_sleep_start();
-  } else {
-    if (debug) {
-      delay(5 * 1000);
-    } else {
-      delay(30 * 1000);
-    }
   }
 }
