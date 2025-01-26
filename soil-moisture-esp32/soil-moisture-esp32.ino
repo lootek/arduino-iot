@@ -2,11 +2,11 @@
 #include <driver/uart.h>
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
-#include "../wifi-creds.h"
+#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-const char* location = "soil_2";
-const char* ssid = ssid_a;
-const int deep_sleep_duration = 3600 * 0; // [s]
+const char* location = "soil_1";
+const char* ssid = ssid_e;
+const int deep_sleep_duration = 3600; // 1h
 
 const bool debug = true;
 
@@ -28,7 +28,6 @@ void setup_mqtt()
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
   client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
-  client.loop();
 }
 
 void setup_deep_sleep()
@@ -75,12 +74,13 @@ void measure(Stream& serial) {
 
 void loop()
 {
+  client.loop();
   measure(Serial);
+  delay(2 * 1000);
+  Serial.println("deep sleep duration: " + String(deep_sleep_duration) + ", WiFi: " + String(client.isWifiConnected()) + ", MQTT: " + String(client.isMqttConnected()));
 
-  delay(30 * 1000);
-
-  if (deep_sleep_duration > 0) {
-    Serial.println("Going to sleep now");
+  if (deep_sleep_duration > 0 && client.isConnected()) {
+    Serial.println("Going to deep sleep now");
     Serial.flush();
     esp_deep_sleep_start();
   }
