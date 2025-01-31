@@ -4,7 +4,7 @@
 #include <DHT.h>
 #include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-const char* location = "soil_1";
+const char* location = "soil_2";
 const char* ssid = ssid_e;
 const int deep_sleep_duration = 3600; // 1h
 
@@ -27,7 +27,7 @@ void setup_mqtt()
   client.enableDebuggingMessages(debug);
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
-  client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
+  client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), (location + String(" going offline")).c_str());
 }
 
 void setup_deep_sleep()
@@ -49,12 +49,21 @@ void onConnectionEstablished()
 void setup()
 {
   Serial.begin(115200);
+  analogSetAttenuation(ADC_11db);
   dht.begin();
   setup_mqtt();
   setup_deep_sleep();
 }
 
 void measure(Stream& serial) {
+  int soil_h = 4096 - analogRead(32);
+  if (isnan(soil_h)) {
+    Serial.println("Soil humidity measurement error");
+  } else {
+    Serial.println(soil_h);
+    client.publish("/sensors/" + String(location) + "/analog/humidity", String(soil_h));
+  }
+
   float t = dht.readTemperature();
   if (isnan(t)) {
     Serial.println("Temp measurement error");
