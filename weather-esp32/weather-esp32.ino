@@ -2,12 +2,12 @@
 
 #include <EspMQTTClient.h>
 #include <DHT.h>
-#include "../wifi-creds.h"
+#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-const char* location = "kitchen";
+const char* location = "guests";
 const char* ssid = ssid_a;
 
-const bool debug = true;
+const bool debug = false;
 
 EspMQTTClient client(
   ssid,
@@ -19,7 +19,7 @@ EspMQTTClient client(
   1883              // The MQTT port, default to 1883. this line can be omitted
 );
 
-DHT dht(14, DHT22);
+DHT dht(22, DHT22);
 
 void setup_mqtt() {
   client.enableDebuggingMessages(debug);

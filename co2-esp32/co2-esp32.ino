@@ -1,19 +1,21 @@
 #define MQTT_VERSION 3
 
 #include <EspMQTTClient.h>
+#include <DHT.h>
 #include <Arduino.h>
 #include <SensirionI2cScd30.h>
 #include <Wire.h>
-#include "../wifi-creds.h"
+//#include "../wifi-creds.h"
+#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-const char* location = "dining_room";
-const char* ssid = ssid_e;
+const char* location = "office";
+const char* ssid = ssid_m;
 
 SensirionI2cScd30 sensor;
 static char errorMessage[128];
 static int16_t error;
 
-const bool debug = true;
+const bool debug = false;
 
 EspMQTTClient client(
   ssid,
@@ -24,6 +26,8 @@ EspMQTTClient client(
   location,         // Client name that uniquely identify your device
   1883              // The MQTT port, default to 1883. this line can be omitted
 );
+
+DHT dht(4, DHT22);
 
 void setup_mqtt() {
   client.enableDebuggingMessages(debug);
@@ -74,6 +78,7 @@ void setup() {
     delay(100);
   }
 
+  dht.begin();
   setup_scd30(Serial);
   setup_mqtt();
 }
@@ -103,6 +108,30 @@ void measure(Stream& serial) {
   serial.print("humidity: ");
   serial.println(humidity);
   client.publish("/sensors/" + String(location) + "/scd30/humidity", String(humidity));
+
+  float t = dht.readTemperature();
+  if (isnan(t)) {
+    Serial.println("Temp measurement error");
+  } else {
+    Serial.println(t);
+    client.publish("/sensors/" + String(location) + "/dht22/temperature", String(t));
+  }
+
+  float h = dht.readHumidity();
+  if (isnan(h)) {
+    Serial.println("Humidity measurement error");
+  } else {
+    Serial.println(h);
+    client.publish("/sensors/" + String(location) + "/dht22/humidity", String(h));
+  }
+
+  if (debug) {
+    Serial.print("temperature = ");
+    Serial.println(t);
+
+    Serial.print("humidity = ");
+    Serial.println(h);
+  }
 
   serial.println();
 }
