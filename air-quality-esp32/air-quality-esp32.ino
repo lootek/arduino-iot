@@ -2,7 +2,7 @@
 
 #include <EspMQTTClient.h>
 #include <sps30.h>
-#include "/Users/piotr/projects/lootek/arduino-playground/wifi-creds.h"
+#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
 const char* location = "patio";
 const char* ssid = ssid_e;
@@ -63,6 +63,7 @@ void setup_sps() {
 
 void setup() {
   Serial.begin(115200);
+  setup_sps();
   setup_mqtt();
 }
 
@@ -88,7 +89,7 @@ void measure(Stream& serial) {
     else
       break;
 
-    delay(100); // retry delay
+    delay(250); // retry delay
   }
 
   ret = sps30_read_measurement(&m); // Ask SPS30 for measurments over I2C, returns 10 sets of data
