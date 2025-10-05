@@ -1,7 +1,9 @@
 #define MQTT_VERSION 3
 
 #include <EspMQTTClient.h>
+#include <Wire.h>
 #include <sps30.h>
+#include <DHT.h>
 #include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
 const char* location = "patio";
@@ -23,6 +25,7 @@ uint32_t auto_clean;
 struct sps30_measurement m;
 char serial[SPS30_MAX_SERIAL_LEN];
 uint16_t data_ready;
+DHT dht(4, DHT22);
 
 void setup_mqtt() {
   client.enableDebuggingMessages(true);
@@ -39,6 +42,8 @@ void onConnectionEstablished() {
 void setup_sps() {
   delay(5000);
 
+  Wire.begin(33,32);
+
   sensirion_i2c_init();
   while (sps30_probe() != 0) {
     Serial.print("SPS sensor probing failed\n");
@@ -52,30 +57,33 @@ void setup_sps() {
     Serial.println(ret);
   }
 
-  // Configures device ready for read every 1 second
-  ret = sps30_start_measurement();
-  if (ret < 0) {
-    Serial.print("error starting measurement\n");
-  }
-
   delay(1000);
 }
 
 void setup() {
   Serial.begin(115200);
+  dht.begin();
   setup_sps();
   setup_mqtt();
 }
 
 void measure(Stream& serial) {
-//  float t = dht.readTemperature();
-//  if (isnan(t)) {
-//    serial.println("Temp measurement error");
-//  } else {
-//    serial.println(t);
-//    client.publish("/sensors/" + String(location) + "/dht22/temperature", String(t));
-//  }
+  float t = dht.readTemperature();
+  if (isnan(t)) {
+    Serial.println("Temp measurement error");
+  } else {
+    Serial.println(t);
+    client.publish("/sensors/" + String(location) + "/dht22/temperature", String(t));
+  }
 
+  float h = dht.readHumidity();
+  if (isnan(h)) {
+    Serial.println("Humidity measurement error");
+  } else {
+    Serial.println(h);
+    client.publish("/sensors/" + String(location) + "/dht22/humidity", String(h));
+  }
+  
   sps30_start_measurement(); // Start of loop start fan to flow air past laser sensor
   delay(5000);
 
@@ -96,24 +104,34 @@ void measure(Stream& serial) {
 
   serial.print("PM  1.0: ");
   serial.println(m.mc_1p0);
+  client.publish("/sensors/" + String(location) + "/sps30/mc_1p0", String(m.mc_1p0));
   serial.print("PM  2.5: ");
   serial.println(m.mc_2p5);
+  client.publish("/sensors/" + String(location) + "/sps30/mc_2p5", String(m.mc_2p5));
   serial.print("PM  4.0: ");
   serial.println(m.mc_4p0);
+  client.publish("/sensors/" + String(location) + "/sps30/mc_4p0", String(m.mc_4p0));
   serial.print("PM 10.0: ");
   serial.println(m.mc_10p0);
+  client.publish("/sensors/" + String(location) + "/sps30/mc_10p0", String(m.mc_10p0));
   serial.print("NC  0.5: ");
   serial.println(m.nc_0p5);
+  client.publish("/sensors/" + String(location) + "/sps30/nc_0p5", String(m.nc_0p5));
   serial.print("NC  1.0: ");
   serial.println(m.nc_1p0);
+  client.publish("/sensors/" + String(location) + "/sps30/nc_1p0", String(m.nc_1p0));
   serial.print("NC  2.5: ");
   serial.println(m.nc_2p5);
+  client.publish("/sensors/" + String(location) + "/sps30/nc_2p5", String(m.nc_2p5));
   serial.print("NC  4.0: ");
   serial.println(m.nc_4p0);
+  client.publish("/sensors/" + String(location) + "/sps30/nc_4p0", String(m.nc_4p0));
   serial.print("NC 10.0: ");
   serial.println(m.nc_10p0);
+  client.publish("/sensors/" + String(location) + "/sps30/nc_10p0", String(m.nc_10p0));
   serial.print("Typical partical size: ");
   serial.println(m.typical_particle_size);
+  client.publish("/sensors/" + String(location) + "/sps30/typical_particle_size", String(m.typical_particle_size));
   serial.println();
 
   sps30_stop_measurement();
