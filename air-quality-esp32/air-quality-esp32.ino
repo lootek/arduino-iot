@@ -1,134 +1,128 @@
-/*
- * Copyright (c) 2025, Sensirion AG
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * * Redistributions of source code must retain the above copyright notice, this
- *   list of conditions and the following disclaimer.
- *
- * * Redistributions in binary form must reproduce the above copyright notice,
- *   this list of conditions and the following disclaimer in the documentation
- *   and/or other materials provided with the distribution.
- *
- * * Neither the name of Sensirion AG nor the names of its
- *   contributors may be used to endorse or promote products derived from
- *   this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-#include <Arduino.h>
-#include <SensirionI2cSps30.h>
-#include <Wire.h>
+#define MQTT_VERSION 3
 
-// macro definitions
-// make sure that we use the proper definition of NO_ERROR
-#ifdef NO_ERROR
-#undef NO_ERROR
-#endif
-#define NO_ERROR 0
+#include <EspMQTTClient.h>
+#include <sps30.h>
+#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-SensirionI2cSps30 sensor;
+const char* location = "patio";
+const char* ssid = ssid_e;
 
-static char errorMessage[64];
-static int16_t error;
+EspMQTTClient client(
+  ssid,
+  password,
+  "192.168.10.18",  // MQTT Broker server ip
+  "",               // MQTTUsername, Can be omitted if not needed
+  "",               // MQTTPassword, Can be omitted if not needed
+  location,         // Client name that uniquely identify your device
+  1883              // The MQTT port, default to 1883. this line can be omitted
+);
+  
+int16_t ret;
+uint8_t auto_clean_days = 4;
+uint32_t auto_clean;
+struct sps30_measurement m;
+char serial[SPS30_MAX_SERIAL_LEN];
+uint16_t data_ready;
+
+void setup_mqtt() {
+  client.enableDebuggingMessages(true);
+  client.enableMQTTPersistence();
+  client.setKeepAlive(90);
+  client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
+}
+
+void onConnectionEstablished() {
+  client.publish("/sensors/" + String(location) + "/mqtt/status", "ready");
+  client.publish("/sensors/" + String(location) + "/wifi/ip", String(client.getMqttServerIp()));
+}
+
+void setup_sps() {
+  delay(5000);
+
+  sensirion_i2c_init();
+  while (sps30_probe() != 0) {
+    Serial.print("SPS sensor probing failed\n");
+    delay(500);
+  }
+
+  // Used to drive the fan for pre-defined sequence every X days
+  ret = sps30_set_fan_auto_cleaning_interval_days(auto_clean_days);
+  if (ret) {
+    Serial.print("error setting the auto-clean interval: ");
+    Serial.println(ret);
+  }
+
+  // Configures device ready for read every 1 second
+  ret = sps30_start_measurement();
+  if (ret < 0) {
+    Serial.print("error starting measurement\n");
+  }
+
+  delay(1000);
+}
 
 void setup() {
+  Serial.begin(115200);
+  setup_sps();
+  setup_mqtt();
+}
 
-    Serial.begin(115200);
-    while (!Serial) {
-        delay(100);
-    }
-    Wire.begin();
-    sensor.begin(Wire, SPS30_I2C_ADDR_69);
+void measure(Stream& serial) {
+//  float t = dht.readTemperature();
+//  if (isnan(t)) {
+//    serial.println("Temp measurement error");
+//  } else {
+//    serial.println(t);
+//    client.publish("/sensors/" + String(location) + "/dht22/temperature", String(t));
+//  }
 
-    sensor.stopMeasurement();
-    int8_t serialNumber[32] = {0};
-    int8_t productType[8] = {0};
-    sensor.readSerialNumber(serialNumber, 32);
-    Serial.print("serialNumber: ");
-    Serial.print((const char*)serialNumber);
-    Serial.println();
-    sensor.readProductType(productType, 8);
-    Serial.print("productType: ");
-    Serial.print((const char*)productType);
-    Serial.println();
-    sensor.startMeasurement(SPS30_OUTPUT_FORMAT_OUTPUT_FORMAT_FLOAT);
-    delay(100);
+  sps30_start_measurement(); // Start of loop start fan to flow air past laser sensor
+  delay(5000);
+
+  while (true) {
+    ret = sps30_read_data_ready(&data_ready); // Reads the last data from the sensor
+    if (ret < 0) {
+      serial.print("error reading data-ready flag: ");
+      serial.println(ret);
+    } else if (!data_ready)
+      serial.print("data not ready, no new measurement available\n");
+    else
+      break;
+
+    delay(250); // retry delay
+  }
+
+  ret = sps30_read_measurement(&m); // Ask SPS30 for measurments over I2C, returns 10 sets of data
+
+  serial.print("PM  1.0: ");
+  serial.println(m.mc_1p0);
+  serial.print("PM  2.5: ");
+  serial.println(m.mc_2p5);
+  serial.print("PM  4.0: ");
+  serial.println(m.mc_4p0);
+  serial.print("PM 10.0: ");
+  serial.println(m.mc_10p0);
+  serial.print("NC  0.5: ");
+  serial.println(m.nc_0p5);
+  serial.print("NC  1.0: ");
+  serial.println(m.nc_1p0);
+  serial.print("NC  2.5: ");
+  serial.println(m.nc_2p5);
+  serial.print("NC  4.0: ");
+  serial.println(m.nc_4p0);
+  serial.print("NC 10.0: ");
+  serial.println(m.nc_10p0);
+  serial.print("Typical partical size: ");
+  serial.println(m.typical_particle_size);
+  serial.println();
+
+  sps30_stop_measurement();
+  delay(25 * 1000);
 }
 
 void loop() {
+  measure(Serial);
 
-    uint16_t dataReadyFlag = 0;
-    float mc1p0 = 0;
-    float mc2p5 = 0;
-    float mc4p0 = 0;
-    float mc10p0 = 0;
-    float nc0p5 = 0;
-    float nc1p0 = 0;
-    float nc2p5 = 0;
-    float nc4p0 = 0;
-    float nc10p0 = 0;
-    float typicalParticleSize = 0;
-    delay(1000);
-    error = sensor.readDataReadyFlag(dataReadyFlag);
-    if (error != NO_ERROR) {
-        Serial.print("Error trying to execute readDataReadyFlag(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-        return;
-    }
-    Serial.print("dataReadyFlag: ");
-    Serial.print(dataReadyFlag);
-    Serial.println();
-    error = sensor.readMeasurementValuesFloat(mc1p0, mc2p5, mc4p0, mc10p0,
-                                              nc0p5, nc1p0, nc2p5, nc4p0,
-                                              nc10p0, typicalParticleSize);
-    if (error != NO_ERROR) {
-        Serial.print("Error trying to execute readMeasurementValuesFloat(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        Serial.println(errorMessage);
-        return;
-    }
-    Serial.print("mc1p0: ");
-    Serial.print(mc1p0);
-    Serial.print("\t");
-    Serial.print("mc2p5: ");
-    Serial.print(mc2p5);
-    Serial.print("\t");
-    Serial.print("mc4p0: ");
-    Serial.print(mc4p0);
-    Serial.print("\t");
-    Serial.print("mc10p0: ");
-    Serial.print(mc10p0);
-    Serial.print("\t");
-    Serial.print("nc0p5: ");
-    Serial.print(nc0p5);
-    Serial.print("\t");
-    Serial.print("nc1p0: ");
-    Serial.print(nc1p0);
-    Serial.print("\t");
-    Serial.print("nc2p5: ");
-    Serial.print(nc2p5);
-    Serial.print("\t");
-    Serial.print("nc4p0: ");
-    Serial.print(nc4p0);
-    Serial.print("\t");
-    Serial.print("nc10p0: ");
-    Serial.print(nc10p0);
-    Serial.print("\t");
-    Serial.print("typicalParticleSize: ");
-    Serial.print(typicalParticleSize);
-    Serial.println();
+  // MQTT
+  client.loop();
 }
