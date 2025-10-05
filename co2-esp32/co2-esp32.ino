@@ -8,14 +8,14 @@
 //#include "../wifi-creds.h"
 #include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-const char* location = "office";
-const char* ssid = ssid_m;
+const char* location = "dining_room";
+const char* ssid = ssid_e;
 
 SensirionI2cScd30 sensor;
 static char errorMessage[128];
 static int16_t error;
 
-const bool debug = false;
+const bool debug = true;
 
 EspMQTTClient client(
   ssid,
@@ -142,9 +142,5 @@ void loop() {
   // MQTT
   client.loop();
 
-  if (debug) {
-    delay(5 * 1000);
-  } else {
-    delay(30 * 1000);
-  }
+  delay(30 * 1000);
 }
