@@ -11,13 +11,12 @@
 const char* location = "dining_room";
 const char* ssid = ssid_e;
 
-SensirionI2cScd30 sensor;
+SensirionI2cScd30 scd30;
 static char errorMessage[128];
 static int16_t error;
 
 const bool debug = true;
-const uint8_t scd30CalPin = 13;  // D13: HIGH enables forced calibration
-const uint16_t scd30ForcedCalPpm = 425;
+const uint8_t SCD30_CALIBRATION_PIN = 13;  // D13: HIGH enables forced calibration
 
 EspMQTTClient client(
   ssid,
@@ -44,59 +43,46 @@ void onConnectionEstablished() {
 }
 
 void setup_scd30(Stream& serial) {
-    Wire.begin();
-    sensor.begin(Wire, SCD30_I2C_ADDR_61);
+  pinMode(SCD30_CALIBRATION_PIN, INPUT);
+  
+  Wire.begin();
+  scd30.begin(Wire, SCD30_I2C_ADDR_61);
 
-    sensor.stopPeriodicMeasurement();
-    sensor.softReset();
-    delay(2000);
-    uint8_t major = 0;
-    uint8_t minor = 0;
-    error = sensor.readFirmwareVersion(major, minor);
-    if (error != NO_ERROR) {
-        serial.print("Error trying to execute readFirmwareVersion(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        serial.println(errorMessage);
-        return;
-    }
-    serial.print("firmware version major: ");
-    serial.print(major);
-    serial.print("\t");
-    serial.print("minor: ");
-    serial.print(minor);
-    serial.println();
+  scd30.stopPeriodicMeasurement();
+  scd30.softReset();
+  delay(2000);
+  uint8_t major = 0;
+  uint8_t minor = 0;
+  error = scd30.readFirmwareVersion(major, minor);
+  if (error != NO_ERROR) {
+    serial.print("Error trying to execute readFirmwareVersion(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    serial.println(errorMessage);
+    return;
+  }
+  serial.print("firmware version major: ");
+  serial.print(major);
+  serial.print("\t");
+  serial.print("minor: ");
+  serial.print(minor);
+  serial.println();
 
-    error = sensor.setAutomaticSelfCalibration(0);
-    if (error != NO_ERROR) {
-        serial.print("Error trying to execute setAutomaticSelfCalibration(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        serial.println(errorMessage);
-    } else {
-        serial.println("Automatic self-calibration disabled");
-    }
+  error = scd30.activateAutoCalibration(0);
+  if (error != NO_ERROR) {
+    serial.print("Error trying to execute setAutomaticSelfCalibration(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    serial.println(errorMessage);
+  } else {
+    serial.println("Automatic self-calibration disabled");
+  }
 
-    if (digitalRead(scd30CalPin) == HIGH) {
-        serial.println("Forced recalibration enabled (D13 HIGH)");
-        error = sensor.setForcedRecalibrationFactor(scd30ForcedCalPpm);
-        if (error != NO_ERROR) {
-            serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
-            errorToString(error, errorMessage, sizeof errorMessage);
-            serial.println(errorMessage);
-        } else {
-            serial.print("Forced recalibration set to ");
-            serial.println(scd30ForcedCalPpm);
-        }
-    } else {
-        serial.println("Forced recalibration skipped (D13 LOW)");
-    }
-
-    error = sensor.startPeriodicMeasurement(0);
-    if (error != NO_ERROR) {
-        serial.print("Error trying to execute startPeriodicMeasurement(): ");
-        errorToString(error, errorMessage, sizeof errorMessage);
-        serial.println(errorMessage);
-        return;
-    }
+  error = scd30.startPeriodicMeasurement(0);
+  if (error != NO_ERROR) {
+    serial.print("Error trying to execute startPeriodicMeasurement(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    serial.println(errorMessage);
+    return;
+  }
 }
 
 void setup() {
@@ -105,35 +91,69 @@ void setup() {
     delay(100);
   }
 
-  pinMode(scd30CalPin, INPUT);
   dht.begin();
   setup_scd30(Serial);
   setup_mqtt();
 }
 
 void measure(Stream& serial) {
+   if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
+      scd30.stopPeriodicMeasurement();
+      scd30.softReset();
+      delay(2000);
+    
+      serial.println("Forced recalibration enabled (D13 HIGH)");
+
+      error = scd30.setAltitudeCompensation(310);
+      if (error != NO_ERROR) {
+          serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
+          errorToString(error, errorMessage, sizeof errorMessage);
+          serial.println(errorMessage);
+      } else {
+          serial.print("Forced recalibration set to ");
+
+          uint16_t altitudeCompensation;
+          scd30.getAltitudeCompensation(altitudeCompensation);
+          serial.println(altitudeCompensation);
+      }
+      
+      error = scd30.forceRecalibration(425);
+      if (error != NO_ERROR) {
+          serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
+          errorToString(error, errorMessage, sizeof errorMessage);
+          serial.println(errorMessage);
+      } else {
+          serial.print("Forced recalibration set to ");
+          
+          uint16_t co2RefConcentration;
+          scd30.getForceRecalibrationStatus(co2RefConcentration);
+          serial.println(co2RefConcentration);
+      }
+
+      return;
+  }
+  
   float co2Concentration = 0.0;
   float temperature = 0.0;
   float humidity = 0.0;
 
-  error = sensor.blockingReadMeasurementData(co2Concentration, temperature, humidity);
+  error = scd30.blockingReadMeasurementData(co2Concentration, temperature, humidity);
   if (error != NO_ERROR) {
       serial.print("Error trying to execute blockingReadMeasurementData(): ");
       errorToString(error, errorMessage, sizeof errorMessage);
       serial.println(errorMessage);
       client.publish("/sensors/" + String(location) + "/scd30/error", String(errorMessage));
-      return;
   }
 
   serial.print("co2Concentration: ");
   serial.println(co2Concentration);
   client.publish("/sensors/" + String(location) + "/scd30/co2", String(co2Concentration));
 
-  serial.print("temperature: ");
+  serial.print("temperature (SCD30): ");
   serial.println(temperature);
   client.publish("/sensors/" + String(location) + "/scd30/temperature", String(temperature));
 
-  serial.print("humidity: ");
+  serial.print("humidity (SCD30): ");
   serial.println(humidity);
   client.publish("/sensors/" + String(location) + "/scd30/humidity", String(humidity));
 
@@ -154,10 +174,10 @@ void measure(Stream& serial) {
   }
 
   if (debug) {
-    Serial.print("temperature = ");
+    Serial.print("temperature (DHT22): ");
     Serial.println(t);
 
-    Serial.print("humidity = ");
+    Serial.print("humidity (DHT22):");
     Serial.println(h);
   }
 
