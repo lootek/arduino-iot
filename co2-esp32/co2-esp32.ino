@@ -16,6 +16,8 @@ static char errorMessage[128];
 static int16_t error;
 
 const bool debug = true;
+const uint8_t scd30CalPin = 13;  // D13: HIGH enables forced calibration
+const uint16_t scd30ForcedCalPpm = 425;
 
 EspMQTTClient client(
   ssid,
@@ -27,7 +29,7 @@ EspMQTTClient client(
   1883              // The MQTT port, default to 1883. this line can be omitted
 );
 
-DHT dht(4, DHT22);
+DHT dht(19, DHT22);
 
 void setup_mqtt() {
   client.enableDebuggingMessages(debug);
@@ -63,6 +65,31 @@ void setup_scd30(Stream& serial) {
     serial.print("minor: ");
     serial.print(minor);
     serial.println();
+
+    error = sensor.setAutomaticSelfCalibration(0);
+    if (error != NO_ERROR) {
+        serial.print("Error trying to execute setAutomaticSelfCalibration(): ");
+        errorToString(error, errorMessage, sizeof errorMessage);
+        serial.println(errorMessage);
+    } else {
+        serial.println("Automatic self-calibration disabled");
+    }
+
+    if (digitalRead(scd30CalPin) == HIGH) {
+        serial.println("Forced recalibration enabled (D13 HIGH)");
+        error = sensor.setForcedRecalibrationFactor(scd30ForcedCalPpm);
+        if (error != NO_ERROR) {
+            serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
+            errorToString(error, errorMessage, sizeof errorMessage);
+            serial.println(errorMessage);
+        } else {
+            serial.print("Forced recalibration set to ");
+            serial.println(scd30ForcedCalPpm);
+        }
+    } else {
+        serial.println("Forced recalibration skipped (D13 LOW)");
+    }
+
     error = sensor.startPeriodicMeasurement(0);
     if (error != NO_ERROR) {
         serial.print("Error trying to execute startPeriodicMeasurement(): ");
@@ -78,6 +105,7 @@ void setup() {
     delay(100);
   }
 
+  pinMode(scd30CalPin, INPUT);
   dht.begin();
   setup_scd30(Serial);
   setup_mqtt();
