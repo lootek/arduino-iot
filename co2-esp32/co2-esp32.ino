@@ -27,7 +27,7 @@ EspMQTTClient client(
   1883              // The MQTT port, default to 1883. this line can be omitted
 );
 
-DHT dht(19, DHT22);
+DHT dht(4, DHT22);
 
 void setup_mqtt() {
   client.enableDebuggingMessages(true);
@@ -49,7 +49,7 @@ void setup_scd30(Stream& serial) {
 
   scd30.stopPeriodicMeasurement();
   scd30.softReset();
-  delay(2000);
+  delay(5000);
   uint8_t major = 0;
   uint8_t minor = 0;
   error = scd30.readFirmwareVersion(major, minor);
@@ -82,6 +82,8 @@ void setup_scd30(Stream& serial) {
     serial.println(errorMessage);
     return;
   }
+
+  delay(10000);
 }
 
 void setup() {
@@ -102,7 +104,8 @@ void measure(Stream& serial) {
   float temperature = 0.0;
   float humidity = 0.0;
 
-  error = scd30.blockingReadMeasurementData(co2Concentration, temperature, humidity);
+  // error = scd30.blockingReadMeasurementData(co2Concentration, temperature, humidity);
+  error = scd30.readMeasurementData(co2Concentration, temperature, humidity);
   if (error != NO_ERROR) {
     serial.print("Error trying to execute blockingReadMeasurementData(): ");
     errorToString(error, errorMessage, sizeof errorMessage);
@@ -140,13 +143,13 @@ void measure(Stream& serial) {
     client.publish("/sensors/" + String(location) + "/dht22/humidity", String(h));
   }
 
-if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
+  if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
     serial.println("Forced recalibration enabled (D13 HIGH)");
     client.publish("/sensors/" + String(location) + "/scd30/calibration", "force");
 
     scd30.stopPeriodicMeasurement();
     scd30.softReset();
-    delay(2000);
+    delay(10000);
 
     error = scd30.setAltitudeCompensation(310);
     if (error != NO_ERROR) {
@@ -175,8 +178,20 @@ if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
       serial.println(co2RefConcentration);
       client.publish("/sensors/" + String(location) + "/scd30/ref_co2", String(co2RefConcentration));
     }
+
+    delay(10000);
+
+    error = scd30.startPeriodicMeasurement(0);
+    if (error != NO_ERROR) {
+      serial.print("Error trying to execute startPeriodicMeasurement(): ");
+      errorToString(error, errorMessage, sizeof errorMessage);
+      serial.println(errorMessage);
+      return;
+    }
+
+    delay(10000);
   }
-  
+
   serial.println();
 }
 
