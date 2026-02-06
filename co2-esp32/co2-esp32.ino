@@ -15,7 +15,6 @@ SensirionI2cScd30 scd30;
 static char errorMessage[128];
 static int16_t error;
 
-const bool debug = true;
 const uint8_t SCD30_CALIBRATION_PIN = 13;  // D13: HIGH enables forced calibration
 
 EspMQTTClient client(
@@ -31,7 +30,7 @@ EspMQTTClient client(
 DHT dht(19, DHT22);
 
 void setup_mqtt() {
-  client.enableDebuggingMessages(debug);
+  client.enableDebuggingMessages(true);
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
   client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
@@ -44,7 +43,7 @@ void onConnectionEstablished() {
 
 void setup_scd30(Stream& serial) {
   pinMode(SCD30_CALIBRATION_PIN, INPUT);
-  
+
   Wire.begin();
   scd30.begin(Wire, SCD30_I2C_ADDR_61);
 
@@ -97,52 +96,18 @@ void setup() {
 }
 
 void measure(Stream& serial) {
-   if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
-      scd30.stopPeriodicMeasurement();
-      scd30.softReset();
-      delay(2000);
-    
-      serial.println("Forced recalibration enabled (D13 HIGH)");
+  serial.println("measure()");
 
-      error = scd30.setAltitudeCompensation(310);
-      if (error != NO_ERROR) {
-          serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
-          errorToString(error, errorMessage, sizeof errorMessage);
-          serial.println(errorMessage);
-      } else {
-          serial.print("Forced recalibration set to ");
-
-          uint16_t altitudeCompensation;
-          scd30.getAltitudeCompensation(altitudeCompensation);
-          serial.println(altitudeCompensation);
-      }
-      
-      error = scd30.forceRecalibration(425);
-      if (error != NO_ERROR) {
-          serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
-          errorToString(error, errorMessage, sizeof errorMessage);
-          serial.println(errorMessage);
-      } else {
-          serial.print("Forced recalibration set to ");
-          
-          uint16_t co2RefConcentration;
-          scd30.getForceRecalibrationStatus(co2RefConcentration);
-          serial.println(co2RefConcentration);
-      }
-
-      return;
-  }
-  
   float co2Concentration = 0.0;
   float temperature = 0.0;
   float humidity = 0.0;
 
   error = scd30.blockingReadMeasurementData(co2Concentration, temperature, humidity);
   if (error != NO_ERROR) {
-      serial.print("Error trying to execute blockingReadMeasurementData(): ");
-      errorToString(error, errorMessage, sizeof errorMessage);
-      serial.println(errorMessage);
-      client.publish("/sensors/" + String(location) + "/scd30/error", String(errorMessage));
+    serial.print("Error trying to execute blockingReadMeasurementData(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    serial.println(errorMessage);
+    client.publish("/sensors/" + String(location) + "/scd30/error", String(errorMessage));
   }
 
   serial.print("co2Concentration: ");
@@ -159,28 +124,59 @@ void measure(Stream& serial) {
 
   float t = dht.readTemperature();
   if (isnan(t)) {
-    Serial.println("Temp measurement error");
+    Serial.println("DHT22 temperature measurement error");
   } else {
+    Serial.print("temperature (DHT22): ");
     Serial.println(t);
     client.publish("/sensors/" + String(location) + "/dht22/temperature", String(t));
   }
 
   float h = dht.readHumidity();
   if (isnan(h)) {
-    Serial.println("Humidity measurement error");
+    Serial.println("DHT22 humidity measurement error");
   } else {
+    Serial.print("humidity (DHT22):");
     Serial.println(h);
     client.publish("/sensors/" + String(location) + "/dht22/humidity", String(h));
   }
 
-  if (debug) {
-    Serial.print("temperature (DHT22): ");
-    Serial.println(t);
+if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
+    serial.println("Forced recalibration enabled (D13 HIGH)");
+    client.publish("/sensors/" + String(location) + "/scd30/calibration", "force");
 
-    Serial.print("humidity (DHT22):");
-    Serial.println(h);
+    scd30.stopPeriodicMeasurement();
+    scd30.softReset();
+    delay(2000);
+
+    error = scd30.setAltitudeCompensation(310);
+    if (error != NO_ERROR) {
+      serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
+      errorToString(error, errorMessage, sizeof errorMessage);
+      serial.println(errorMessage);
+    } else {
+      serial.print("Forced recalibration set to ");
+
+      uint16_t altitudeCompensation;
+      scd30.getAltitudeCompensation(altitudeCompensation);
+      serial.println(altitudeCompensation);
+      client.publish("/sensors/" + String(location) + "/scd30/alt_compensation", String(altitudeCompensation));
+    }
+
+    error = scd30.forceRecalibration(425);
+    if (error != NO_ERROR) {
+      serial.print("Error trying to execute setForcedRecalibrationFactor(): ");
+      errorToString(error, errorMessage, sizeof errorMessage);
+      serial.println(errorMessage);
+    } else {
+      serial.print("Forced recalibration set to ");
+
+      uint16_t co2RefConcentration;
+      scd30.getForceRecalibrationStatus(co2RefConcentration);
+      serial.println(co2RefConcentration);
+      client.publish("/sensors/" + String(location) + "/scd30/ref_co2", String(co2RefConcentration));
+    }
   }
-
+  
   serial.println();
 }
 
