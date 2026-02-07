@@ -41,8 +41,9 @@ void onConnectionEstablished() {
   client.publish("/sensors/" + String(location) + "/wifi/ip", String(client.getMqttServerIp()));
 }
 
+void consider_recalibrating_scd30(Stream&);
 void setup_scd30(Stream& serial) {
-  pinMode(SCD30_CALIBRATION_PIN, INPUT);
+  pinMode(SCD30_CALIBRATION_PIN, INPUT_PULLDOWN);
 
   Wire.begin();
   scd30.begin(Wire, SCD30_I2C_ADDR_61);
@@ -50,6 +51,7 @@ void setup_scd30(Stream& serial) {
   scd30.stopPeriodicMeasurement();
   scd30.softReset();
   delay(5000);
+
   uint8_t major = 0;
   uint8_t minor = 0;
   error = scd30.readFirmwareVersion(major, minor);
@@ -143,13 +145,22 @@ void measure(Stream& serial) {
     client.publish("/sensors/" + String(location) + "/dht22/humidity", String(h));
   }
 
-  if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
-    serial.println("Forced recalibration enabled (D13 HIGH)");
-    client.publish("/sensors/" + String(location) + "/scd30/calibration", "force");
+  consider_recalibrating_scd30(serial);
 
-    scd30.stopPeriodicMeasurement();
-    scd30.softReset();
-    delay(10000);
+  serial.println();
+}
+
+const uint8_t recalibration_interval_threshold = 6;
+uint8_t recalibration_interval_cnt = 0;
+void consider_recalibrating_scd30(Stream& serial) {
+  if (digitalRead(SCD30_CALIBRATION_PIN) == HIGH) {
+    recalibration_interval_cnt++;
+    if (recalibration_interval_cnt%recalibration_interval_threshold != 0) {
+      return;
+    }
+    
+    serial.println("Forced recalibration triggered (D13 HIGH)");
+    client.publish("/sensors/" + String(location) + "/scd30/calibration", "force");
 
     error = scd30.setAltitudeCompensation(310);
     if (error != NO_ERROR) {
@@ -157,7 +168,7 @@ void measure(Stream& serial) {
       errorToString(error, errorMessage, sizeof errorMessage);
       serial.println(errorMessage);
     } else {
-      serial.print("Forced recalibration set to ");
+      serial.print("Altitude compensation set to ");
 
       uint16_t altitudeCompensation;
       scd30.getAltitudeCompensation(altitudeCompensation);
@@ -171,28 +182,14 @@ void measure(Stream& serial) {
       errorToString(error, errorMessage, sizeof errorMessage);
       serial.println(errorMessage);
     } else {
-      serial.print("Forced recalibration set to ");
+      serial.print("Ref CO2 set to ");
 
       uint16_t co2RefConcentration;
       scd30.getForceRecalibrationStatus(co2RefConcentration);
       serial.println(co2RefConcentration);
       client.publish("/sensors/" + String(location) + "/scd30/ref_co2", String(co2RefConcentration));
     }
-
-    delay(10000);
-
-    error = scd30.startPeriodicMeasurement(0);
-    if (error != NO_ERROR) {
-      serial.print("Error trying to execute startPeriodicMeasurement(): ");
-      errorToString(error, errorMessage, sizeof errorMessage);
-      serial.println(errorMessage);
-      return;
-    }
-
-    delay(10000);
   }
-
-  serial.println();
 }
 
 void loop() {
