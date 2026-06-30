@@ -1,11 +1,13 @@
-#define MQTT_VERSION 3
+#define MQTT_VERSION 4
 
 #include <EspMQTTClient.h>
 #include <DHT.h>
-#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
 
-const char* location = "guests";
-const char* ssid = ssid_a;
+#include "../wifi-creds.h"
+#include "../dht22_pins_layout.h"
+
+const char* location = "basement";
+const char* ssid = ssid_h;
 
 const bool debug = false;
 
@@ -19,13 +21,16 @@ EspMQTTClient client(
   1883              // The MQTT port, default to 1883. this line can be omitted
 );
 
-DHT dht(22, DHT22);
+DHT dht(dht22_pin_for_location(location), DHT22);
+
+String lastWillTopic;
 
 void setup_mqtt() {
   client.enableDebuggingMessages(debug);
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
-  client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
+  lastWillTopic = String("/sensors/") + location + String("/lastwill");
+  client.enableLastWillMessage(lastWillTopic.c_str(), "I am going offline");
 }
 
 void onConnectionEstablished() {
