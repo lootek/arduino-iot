@@ -16,12 +16,12 @@ SensirionI2cScd30 scd30;
 static char errorMessage[128];
 static int16_t error;
 
-// FRC fires once per boot after this many valid readings (~10 min at 30s loop).
-// Long enough for the NDIR chamber to equilibrate to ambient outside air after
-// the sensor has been inside (elevated CO2) for an extended period.
-const uint16_t FRC_WARMUP_READINGS = 20;
-uint16_t valid_reading_count = 0;
-bool frc_done = false;
+// SCD30 FRC calibration curve is stored in the sensor's non-volatile memory
+// and persists across power cycles. We do NOT auto-FRC on boot - that would
+// re-calibrate to whatever air the device is in at boot time (e.g. indoor
+// 600-1500 ppm at home), destroying the outside-air calibration. To re-FRC,
+// publish a ppm value to /sensors/<location>/scd30/cmd/frc (see onConnectionEstablished).
+const uint16_t SCD30_ALTITUDE_COMPENSATION_M = 310;
 
 EspMQTTClient client(
   ssid,
@@ -48,9 +48,37 @@ void setup_mqtt() {
 void onConnectionEstablished() {
   client.publish("/sensors/" + String(location) + "/mqtt/status", "ready");
   publish_connected_wifi_info(client, location);
+
+  // On-demand FRC: publish a ppm value (400-2000) to this topic to force
+  // recalibration against that reference. Only do this in a known reference
+  // atmosphere (e.g. outside air ~430 ppm). The new calibration persists in
+  // the SCD30's NVM across power cycles.
+  client.subscribe("/sensors/" + String(location) + "/scd30/cmd/frc", [](const String& payload) {
+    long ref = payload.toInt();
+    if (ref < 400 || ref > 2000) {
+      client.publish("/sensors/" + String(location) + "/scd30/error", "frc ref out of range: " + payload);
+      return;
+    }
+    client.publish("/sensors/" + String(location) + "/scd30/calibration", "force:" + payload);
+
+    error = scd30.setAltitudeCompensation(SCD30_ALTITUDE_COMPENSATION_M);
+    if (error != NO_ERROR) {
+      errorToString(error, errorMessage, sizeof errorMessage);
+      client.publish("/sensors/" + String(location) + "/scd30/error", String("setAltitudeCompensation: ") + errorMessage);
+    }
+
+    error = scd30.forceRecalibration((uint16_t)ref);
+    if (error != NO_ERROR) {
+      errorToString(error, errorMessage, sizeof errorMessage);
+      client.publish("/sensors/" + String(location) + "/scd30/error", String("forceRecalibration: ") + errorMessage);
+    } else {
+      uint16_t refBack = 0;
+      scd30.getForceRecalibrationStatus(refBack);
+      client.publish("/sensors/" + String(location) + "/scd30/ref_co2", String(refBack));
+    }
+  });
 }
 
-void consider_recalibrating_scd30(Stream&);
 void setup_scd30(Stream& serial) {
   Wire.begin();
   scd30.begin(Wire, SCD30_I2C_ADDR_61);
@@ -91,6 +119,16 @@ void setup_scd30(Stream& serial) {
     serial.println(errorMessage);
   } else {
     serial.println("Measurement interval set to 2s");
+  }
+
+  error = scd30.setAltitudeCompensation(SCD30_ALTITUDE_COMPENSATION_M);
+  if (error != NO_ERROR) {
+    serial.print("Error setAltitudeCompensation(): ");
+    errorToString(error, errorMessage, sizeof errorMessage);
+    serial.println(errorMessage);
+  } else {
+    serial.print("Altitude compensation set to ");
+    serial.println(SCD30_ALTITUDE_COMPENSATION_M);
   }
 
   error = scd30.startPeriodicMeasurement(0);
@@ -147,7 +185,6 @@ void measure(Stream& serial) {
       serial.println(errorMessage);
       client.publish("/sensors/" + String(location) + "/scd30/error", String(errorMessage));
     } else if (!isnan(co2Concentration) && co2Concentration > 0) {
-      valid_reading_count++;
       serial.print("co2Concentration: ");
       serial.println(co2Concentration);
       client.publish("/sensors/" + String(location) + "/scd30/co2", String(co2Concentration));
@@ -184,49 +221,7 @@ void measure(Stream& serial) {
     client.publish("/sensors/" + String(location) + "/dht22/humidity", String(h));
   }
 
-  consider_recalibrating_scd30(serial);
-
   serial.println();
-}
-
-void consider_recalibrating_scd30(Stream& serial) {
-  if (frc_done) {
-    return;
-  }
-  if (valid_reading_count < FRC_WARMUP_READINGS) {
-    return;
-  }
-
-  frc_done = true;
-  serial.println("Forced recalibration triggered (warmup complete)");
-  client.publish("/sensors/" + String(location) + "/scd30/calibration", "force");
-
-  error = scd30.setAltitudeCompensation(310);
-  if (error != NO_ERROR) {
-    serial.print("Error setAltitudeCompensation(): ");
-    errorToString(error, errorMessage, sizeof errorMessage);
-    serial.println(errorMessage);
-  } else {
-    uint16_t altitudeCompensation;
-    scd30.getAltitudeCompensation(altitudeCompensation);
-    serial.print("Altitude compensation set to ");
-    serial.println(altitudeCompensation);
-    client.publish("/sensors/" + String(location) + "/scd30/alt_compensation", String(altitudeCompensation));
-  }
-
-  error = scd30.forceRecalibration(450);
-  if (error != NO_ERROR) {
-    serial.print("Error forceRecalibration(): ");
-    errorToString(error, errorMessage, sizeof errorMessage);
-    serial.println(errorMessage);
-    client.publish("/sensors/" + String(location) + "/scd30/error", String(errorMessage));
-  } else {
-    uint16_t co2RefConcentration;
-    scd30.getForceRecalibrationStatus(co2RefConcentration);
-    serial.print("Ref CO2 set to ");
-    serial.println(co2RefConcentration);
-    client.publish("/sensors/" + String(location) + "/scd30/ref_co2", String(co2RefConcentration));
-  }
 }
 
 void loop() {
