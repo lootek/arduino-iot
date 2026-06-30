@@ -1,12 +1,13 @@
-#define MQTT_VERSION 3
+#define MQTT_VERSION 4
 
 #include <EspMQTTClient.h>
 #include <DHT.h>
 #include <Arduino.h>
 #include <SensirionI2cScd30.h>
 #include <Wire.h>
-//#include "../wifi-creds.h"
-#include "/mnt/data/projects/arduino-playground/wifi-creds.h"
+#include "../wifi-creds.h"
+#include "../dht22_pins_layout.h"
+#include "../wifi_diagnostics.h"
 
 const char* location = "dining_room";
 const char* ssid = ssid_e;
@@ -27,18 +28,21 @@ EspMQTTClient client(
   1883              // The MQTT port, default to 1883. this line can be omitted
 );
 
-DHT dht(4, DHT22);
+DHT dht(dht22_pin_for_location(location), DHT22);
+
+String lastWillTopic;
 
 void setup_mqtt() {
   client.enableDebuggingMessages(true);
   client.enableMQTTPersistence();
   client.setKeepAlive(90);
-  client.enableLastWillMessage((String("/sensors/") + location + String("/lastwill")).c_str(), "I am going offline");
+  lastWillTopic = String("/sensors/") + location + String("/lastwill");
+  client.enableLastWillMessage(lastWillTopic.c_str(), "I am going offline");
 }
 
 void onConnectionEstablished() {
   client.publish("/sensors/" + String(location) + "/mqtt/status", "ready");
-  client.publish("/sensors/" + String(location) + "/wifi/ip", String(client.getMqttServerIp()));
+  publish_connected_wifi_info(client, location);
 }
 
 void consider_recalibrating_scd30(Stream&);
@@ -197,6 +201,12 @@ void loop() {
 
   // MQTT
   client.loop();
+
+  static uint16_t wifi_scan_tick = 0;
+  if (++wifi_scan_tick >= 60) {
+    wifi_scan_tick = 0;
+    publish_wifi_scan(client, location);
+  }
 
   delay(30 * 1000);
 }
