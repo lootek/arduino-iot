@@ -5,6 +5,7 @@
 
 #include "../wifi-creds.h"
 #include "../dht22_pins_layout.h"
+#include "../wifi_diagnostics.h"
 
 const char* location = "basement";
 const char* ssid = ssid_h;
@@ -35,7 +36,7 @@ void setup_mqtt() {
 
 void onConnectionEstablished() {
   client.publish("/sensors/" + String(location) + "/mqtt/status", "ready");
-  client.publish("/sensors/" + String(location) + "/wifi/ip", String(client.getMqttServerIp()));
+  publish_connected_wifi_info(client, location);
 }
 
 void setup() {
@@ -75,6 +76,12 @@ void loop() {
 
   // MQTT
   client.loop();
+
+  static uint16_t wifi_scan_tick = 0;
+  if (++wifi_scan_tick >= 60) {
+    wifi_scan_tick = 0;
+    publish_wifi_scan(client, location);
+  }
 
   if (debug) {
     delay(5 * 1000);
