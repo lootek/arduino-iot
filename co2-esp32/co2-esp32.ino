@@ -112,13 +112,13 @@ void setup_scd30(Stream& serial) {
     serial.println("Automatic self-calibration disabled");
   }
 
-  error = scd30.setMeasurementInterval(2);
+  error = scd30.setMeasurementInterval(15);
   if (error != NO_ERROR) {
     serial.print("Error trying to execute setMeasurementInterval(): ");
     errorToString(error, errorMessage, sizeof errorMessage);
     serial.println(errorMessage);
   } else {
-    serial.println("Measurement interval set to 2s");
+    serial.println("Measurement interval set to 15s");
   }
 
   error = scd30.setAltitudeCompensation(SCD30_ALTITUDE_COMPENSATION_M);
@@ -140,7 +140,8 @@ void setup_scd30(Stream& serial) {
   }
   serial.println("Periodic measurement started");
 
-  delay(10000);
+  // Wait for the first measurement to be ready (>1 interval at 15s).
+  delay(20000);
 }
 
 void setup() {
