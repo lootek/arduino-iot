@@ -1,6 +1,7 @@
 // wifi_diagnostics.h
 // Publishes per-network WiFi diagnostics under BSSID-keyed MQTT topics:
 //   /sensors/<location>/wifi/<bssid>/rssi      — for every visible network
+//   /sensors/<location>/wifi/<bssid>/ssid      — for every visible network
 //   /sensors/<location>/wifi/<bssid>/channel  — only for the connected AP
 //   /sensors/<location>/wifi/<bssid>/ip        — only for the connected AP
 //
@@ -20,6 +21,7 @@ inline void publish_connected_wifi_info(EspMQTTClient& client, const char* locat
   String connected_bssid = WiFi.BSSIDstr();
   String prefix = "/sensors/" + String(location) + "/wifi/" + connected_bssid + "/";
   client.publish(prefix + "rssi", String(WiFi.RSSI()));
+  client.publish(prefix + "ssid", WiFi.SSID());
   client.publish(prefix + "channel", String(WiFi.channel()));
   client.publish(prefix + "ip", WiFi.localIP().toString());
 }
@@ -32,8 +34,9 @@ inline void publish_wifi_scan(EspMQTTClient& client, const char* location) {
     if (bssid == connected_bssid) {
       continue;
     }
-    client.publish("/sensors/" + String(location) + "/wifi/" + bssid + "/rssi",
-                   String(WiFi.RSSI(i)));
+    String prefix = "/sensors/" + String(location) + "/wifi/" + bssid + "/";
+    client.publish(prefix + "rssi", String(WiFi.RSSI(i)));
+    client.publish(prefix + "ssid", WiFi.SSID(i));
   }
   WiFi.scanDelete();
 }
