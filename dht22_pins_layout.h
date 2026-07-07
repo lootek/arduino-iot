@@ -18,6 +18,7 @@
 inline uint8_t dht22_pin_for_location(const char* loc) {
   if (strcmp(loc, "basement")    == 0) return 4;
   if (strcmp(loc, "dining_room") == 0) return 4;
+  if (strcmp(loc, "office")      == 0) return 4;
   if (strcmp(loc, "kitchen")     == 0) return 14;
   return 14;  // fallback for unmapped locations
 }

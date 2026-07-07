@@ -9,8 +9,8 @@
 #include "../dht22_pins_layout.h"
 #include "../wifi_diagnostics.h"
 
-const char* location = "dining_room";
-const char* ssid = ssid_e;
+const char* location = "office";
+const char* ssid = ssid_m;
 
 SensirionI2cScd30 scd30;
 static char errorMessage[128];
